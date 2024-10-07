@@ -6,10 +6,10 @@ contract MyContract {
         string ipfsHash;  // HASH OF THE FILE IN IPFS
         address uploader; // WHO UPLOADED THE FILE
         uint256 fileSize; // FILE SIZE IN BYTES
-        uint256 timestamp; // TIMESTAMP OF UPLOAD
+        // uint256 timestamp; // TIMESTAMP OF UPLOAD
     }
 
-    File[] public files;
+    File[] public files; 
 
     event FileUploaded(string ipfsHash, address indexed uploader, uint256 fileSize, uint256 timestamp);
 
@@ -30,5 +30,7 @@ contract MyContract {
 
     function getFileCount() public view returns (uint256) {
         return files.length;
-    }
+    }        
 }
+
+
