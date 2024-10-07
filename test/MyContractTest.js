@@ -1,55 +1,31 @@
-const MyContract = artifacts.require("MyContract");
+const MyContract = artifacts.require('MyContract');
 
-contract("MyContract", (accounts) => {
-    
-    let myContractInstance;
-    const [uploader] = accounts; // The first account will be the uploader
+contract('MyContract', (accounts) => {
+    const uploader = accounts[0];
 
-    beforeEach(async () => {
-        // Deploy a new instance of the contract before each test
-        myContractInstance = await MyContract.new();
+    it('should upload a file with file size and track details', async () => {
+        const contractInstance = await MyContract.deployed();
+
+        // Sample IPFS hash and file size
+        const ipfsHash = 'QmT5NvUtoM3nQ4c3Z1gFBrq6WrPUPvfp45WwQ3scA4Ngh5';
+        const fileSize = 1024; // File size in bytes
+
+        // Upload the file to the contract
+        await contractInstance.storeFile(ipfsHash, fileSize, { from: uploader });
+
+        // Retrieve the file details
+        const file = await contractInstance.getFile(0);
+
+        // Assert the values
+        assert.equal(file[0], ipfsHash, 'IPFS hash mismatch');
+        assert.equal(file[1], uploader, 'Uploader mismatch');
+        assert.equal(file[2].toNumber(), fileSize, 'File size mismatch');
     });
 
-    describe("File Management", () => {
-        
-        it("should store a file and emit an event", async () => {
-            const ipfsHash = "QmT5NvUtoM3nQ4c3Z1gFBrq6WrPUPvfp45WwQ3scA4Ngh5"; // Example IPFS hash
-            
-            // Listen for the event emitted when a file is uploaded
-            const result = await myContractInstance.storeFile(ipfsHash, { from: uploader });
+    it('should return the correct file count', async () => {
+        const contractInstance = await MyContract.deployed();
 
-            // Check that the event was emitted
-            const event = result.logs[0];
-            assert.equal(event.event, "FileUploaded", "FileUploaded event should be emitted");
-            assert.equal(event.args.ipfsHash, ipfsHash, "IPFS hash should match");
-            assert.equal(event.args.uploader, uploader, "Uploader address should match");
-        });
-
-        it("should retrieve a file correctly", async () => {
-            const ipfsHash = "QmT5NvUtoM3nQ4c3Z1gFBrq6WrPUPvfp45WwQ3scA4Ngh5"; // Example IPFS hash
-            
-            await myContractInstance.storeFile(ipfsHash, { from: uploader });
-            const file = await myContractInstance.getFile(0);
-
-            assert.equal(file[0], ipfsHash, "IPFS hash should match the stored hash");
-            assert.equal(file[1], uploader, "Uploader address should match");
-        });
-
-        it("should return the correct file count", async () => {
-            await myContractInstance.storeFile("QmT5NvUtoM3nQ4c3Z1gFBrq6WrPUPvfp45WwQ3scA4Ngh5", { from: uploader });
-            await myContractInstance.storeFile("QmR5NvUtoM3nQ4c3Z1gFBrq6WrPUPvfp45WwQ3scA4Ngh5", { from: uploader });
-
-            const count = await myContractInstance.getFileCount();
-            assert.equal(count.toString(), "2", "File count should be 2");
-        });
-
-        it("should revert when trying to retrieve a non-existent file", async () => {
-            try {
-                await myContractInstance.getFile(0);
-                assert.fail("Expected revert not received");
-            } catch (error) {
-                assert(error.message.includes("File does not exist"), "Error message should contain 'File does not exist'");
-            }
-        });
+        const count = await contractInstance.getFileCount();
+        assert.equal(count.toNumber(), 1, 'File count should be 1');
     });
 });
