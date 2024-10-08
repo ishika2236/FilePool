@@ -1,0 +1,27 @@
+{
+    "abi": [
+      {
+        "constant": true,
+        "inputs": [],
+        "name": "myFunction",
+        "outputs": [
+          {
+            "name": "",
+            "type": "string"
+          }
+        ],
+        "payable": false,
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ],
+    "networks": {
+      "5777": {
+        "events": {},
+        "links": {},
+        "address": "0x1234567890abcdef1234567890abcdef12345678",
+        "transactionHash": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef"
+      }
+    }
+  }
+  
