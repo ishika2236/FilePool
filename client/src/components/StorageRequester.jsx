@@ -1,12 +1,13 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import io from 'socket.io-client';
+import axios from 'axios';
 
 const StorageRequester = ({ signer, account, contractAddress, contractABI }) => {
   const [requiredSpace, setRequiredSpace] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [transferProgress, setTransferProgress] = useState(0);
 
   useEffect(() => {
     const newSocket = io('http://localhost:5000'); // Your server address
@@ -18,27 +19,16 @@ const StorageRequester = ({ signer, account, contractAddress, contractABI }) => 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Find a suitable provider
-      const response = await fetch('/api/providers/match', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          requiredSpace: parseFloat(requiredSpace)
-        }),
+      const response = await axios.post('http://localhost:5000/api/providers/match', {
+        requiredSpace: parseFloat(requiredSpace),
       });
-
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error('Failed to find a suitable provider');
       }
 
-      const { providerId, providerAddress, roomId } = await response.json();
+      const { providerId, providerAddress, roomId } = response.data;
 
-      // Set up WebRTC connection and send file
       await setupWebRTCAndSendFile(roomId);
-
-      // Create agreement on the blockchain
       await createAgreement(providerAddress);
 
       alert('File transfer initiated and agreement created!');
@@ -48,7 +38,7 @@ const StorageRequester = ({ signer, account, contractAddress, contractABI }) => 
     }
   };
 
-  const setupWebRTCAndSendFile = (roomId) => {
+  const setupWebRTCAndSendFile = useCallback((roomId) => {
     return new Promise((resolve, reject) => {
       const peerConnection = new RTCPeerConnection();
       const sendChannel = peerConnection.createDataChannel('fileTransfer');
@@ -79,9 +69,9 @@ const StorageRequester = ({ signer, account, contractAddress, contractABI }) => 
         socket.emit('offer', peerConnection.localDescription, roomId);
       }).catch(reject);
     });
-  };
+  }, [socket]);
 
-  const sendFile = (channel) => {
+  const sendFile = useCallback((channel) => {
     const chunkSize = 16384;
     const fileReader = new FileReader();
     let offset = 0;
@@ -89,6 +79,8 @@ const StorageRequester = ({ signer, account, contractAddress, contractABI }) => 
     fileReader.onload = (e) => {
       channel.send(e.target.result);
       offset += e.target.result.byteLength;
+      const progress = Math.round((offset / selectedFile.size) * 100);
+      setTransferProgress(progress);
       if (offset < selectedFile.size) {
         readSlice(offset);
       }
@@ -100,7 +92,7 @@ const StorageRequester = ({ signer, account, contractAddress, contractABI }) => 
     };
 
     readSlice(0);
-  };
+  }, [selectedFile]);
 
   const createAgreement = async (providerAddress) => {
     const contract = new ethers.Contract(contractAddress, contractABI, signer);

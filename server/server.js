@@ -20,9 +20,9 @@ const contractRoute = require('./contract')
 mongoose.connect("mongodb://localhost:27017/", { useNewUrlParser: true, useUnifiedTopology: true });
 
 // Connect to Ethereum network (replace with your network details)
-const provider = new ethers.JsonRpcProvider('http://localhost:8545');
+const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
 
-app.use('/contract',contractRoute);
+// app.use('/contract',contractRoute);
 let contract;
 const corsOptions = {
     origin: "http://localhost:5173", // Change this to your frontend URL
@@ -43,7 +43,7 @@ const corsOptions = {
 // Adjust the path if needed
 
 
-app.use('/api/providers', providerRoute);
+app.use('/api/providers/', providerRoute);
 // Function to initialize the contract
 async function initializeContract(address) {
   try {

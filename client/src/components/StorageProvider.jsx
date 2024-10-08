@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import io from 'socket.io-client';
+import axios from 'axios';
 
 const StorageProvider = ({ signer, account, contractAddress, contractABI }) => {
   const [availableSpace, setAvailableSpace] = useState('');
   const [pricePerGB, setPricePerGB] = useState('');
   const [socket, setSocket] = useState(null);
+  const [transferProgress, setTransferProgress] = useState(0);
+  const [currentFile, setCurrentFile] = useState(null);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:5000'); // Your server address
+    const newSocket = io('http://localhost:5000');
     setSocket(newSocket);
 
     return () => newSocket.close();
@@ -17,27 +20,15 @@ const StorageProvider = ({ signer, account, contractAddress, contractABI }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Register provider in the database
-      const response = await fetch('/api/providers/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          address: account, // Use the account prop here
-          availableSpace: parseFloat(availableSpace),
-          pricePerGB: parseFloat(pricePerGB)
-        }),
+      const response = await axios.post('http://localhost:5000/api/providers/register', {
+        address: account,
+        availableSpace: parseFloat(availableSpace),
+        pricePerGB: parseFloat(pricePerGB)
       });
-  
-      if (!response.ok) {
-        throw new Error('Failed to register as provider');
-      }
-  
-      const result = await response.json();
+
+      const result = response.data;
       console.log('Registered as provider:', result);
   
-      // Set up WebRTC connection to receive files
       setupWebRTC();
   
       alert('Successfully registered as a provider!');
@@ -46,21 +37,22 @@ const StorageProvider = ({ signer, account, contractAddress, contractABI }) => {
       alert('Failed to register as provider. See console for details.');
     }
   };
-  
 
-  const setupWebRTC = () => {
+  const setupWebRTC = useCallback(() => {
     const peerConnection = new RTCPeerConnection();
 
     peerConnection.ondatachannel = (event) => {
       const receiveChannel = event.channel;
       receiveChannel.onmessage = handleReceiveMessage;
+      receiveChannel.onopen = () => console.log('Data channel opened');
+      receiveChannel.onclose = () => console.log('Data channel closed');
     };
 
-    socket.on('offer', async (offer) => {
+    socket.on('offer', async (offer, roomId) => {
       await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
-      socket.emit('answer', answer, offer.roomId);
+      socket.emit('answer', answer, roomId);
     });
 
     socket.on('ice-candidate', (candidate) => {
@@ -69,20 +61,62 @@ const StorageProvider = ({ signer, account, contractAddress, contractABI }) => {
 
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('ice-candidate', event.candidate, 'roomId'); // You'll need to implement room management
+        socket.emit('ice-candidate', event.candidate, 'roomId');
       }
     };
-  };
+  }, [socket]);
 
-  const handleReceiveMessage = (event) => {
-    // Handle received file chunks here
-    console.log('Received data:', event.data);
+  const handleReceiveMessage = useCallback((event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'file-info') {
+      setCurrentFile({
+        name: data.name,
+        size: data.size,
+        receivedSize: 0,
+        chunks: []
+      });
+    } else if (data.type === 'file-chunk') {
+      setCurrentFile(prevFile => {
+        const newChunks = [...prevFile.chunks, data.chunk];
+        const newReceivedSize = prevFile.receivedSize + data.chunk.byteLength;
+        const progress = (newReceivedSize / prevFile.size) * 100;
+        setTransferProgress(progress);
+        
+        if (newReceivedSize === prevFile.size) {
+          // File transfer complete, create contract
+          createContract(prevFile.size);
+        }
+
+        return {
+          ...prevFile,
+          receivedSize: newReceivedSize,
+          chunks: newChunks
+        };
+      });
+    }
+  }, []);
+
+  const createContract = async (fileSize) => {
+    try {
+      const response = await axios.post('http://localhost:5000/api/providers/transfer-complete', {
+        providerAddress: account,
+        requesterAddress: currentFile.requesterAddress, // You need to get this from the file transfer process
+        fileSize: fileSize,
+        duration: 30 * 24 * 60 * 60 // 30 days in seconds, you might want to make this configurable
+      });
+
+      console.log('Contract created:', response.data);
+      alert('File transfer completed and contract created!');
+    } catch (error) {
+      console.error('Error creating contract:', error);
+      alert('Failed to create contract after file transfer. See console for details.');
+    }
   };
 
   return (
     <div>
       <h2>Become a Storage Provider</h2>
-      {account ? ( // Use account instead of address
+      {account ? (
         <p>Connected wallet: {account}</p>
       ) : (
         <button onClick={connectWallet}>Connect MetaMask</button>
@@ -109,6 +143,13 @@ const StorageProvider = ({ signer, account, contractAddress, contractABI }) => {
         </div>
         <button type="submit">Register as Provider</button>
       </form>
+      {currentFile && (
+        <div>
+          <h3>Receiving File: {currentFile.name}</h3>
+          <progress value={transferProgress} max="100"></progress>
+          <p>{transferProgress.toFixed(2)}% complete</p>
+        </div>
+      )}
     </div>
   );
 };

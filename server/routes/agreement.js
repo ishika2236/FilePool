@@ -4,7 +4,8 @@ const ethers = require('ethers');
 const contractABI = require('../contracts/StorageLending.json').abi;
 const config = require('../config');
 
-const provider = new ethers.JsonRpcProvider(config.ganacheURI);
+// const provider = new ethers.JsonRpcProvider(config.ganacheURI);
+const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
 
 // We'll get the contract instance from the request object
 // This will be set by the middleware in server.js
